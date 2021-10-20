@@ -18,16 +18,18 @@ type script struct {
 	editable   string
 }
 
+const scriptFilePath = "/Users/torbratsberg/.config/scripthub/scripts"
+
+// Error checker
 func check(e error) {
 	if e != nil {
-		panic(e)
+		log.Fatal(e)
 	}
 }
 
+// Returns a list of all the scripts in the config file
 func getScripts() []script {
-	scriptPaths, err := os.ReadFile(
-		"/Users/torbratsberg/.config/scripthub/scripts",
-	)
+	scriptPaths, err := os.ReadFile(scriptFilePath)
 	check(err)
 
 	scriptLines := strings.Split(string(scriptPaths), "\n")
@@ -50,6 +52,7 @@ func getScripts() []script {
 	return scriptsStruct
 }
 
+// Appends a script to the script file
 func addScript(newScript script) error {
 	// Make the executable path
 	executablePath, err := os.Getwd()
@@ -66,7 +69,7 @@ func addScript(newScript script) error {
 	}
 
 	// Write new script entry to the scripts file
-	file, err := os.OpenFile("/Users/torbratsberg/.config/scripthub/scripts", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(scriptFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	if err != nil {
 		log.Println(err)
@@ -88,6 +91,7 @@ func addScript(newScript script) error {
 	return nil
 }
 
+// Opens the editable script file in the EDITOR env variable
 func editScript(editScript string) error {
 	// Get all the scripts
 	scripts := getScripts()
@@ -96,6 +100,7 @@ func editScript(editScript string) error {
 	for i := 0; i < len(scripts); i += 1 {
 		if scripts[i].name == editScript {
 			editScript = scripts[i].editable
+			break
 		}
 	}
 
@@ -109,28 +114,24 @@ func editScript(editScript string) error {
 	return nil
 }
 
+// Removes script from the script file
 func removeScript(name string) error {
-	scriptPaths, err := os.ReadFile("/Users/torbratsberg/.config/scripthub/scripts")
+	scriptPaths, err := os.ReadFile(scriptFilePath)
 	check(err)
 
-	scriptLines := strings.Split(string(scriptPaths), "\n")
+	scriptLines := string(scriptPaths)
 
-	var index int
-	for ; index < len(scriptLines)-1; index += 1 {
-		res, err := regexp.MatchString(name, scriptLines[index])
-		check(err)
+	// Remove line starting with {name}
+	re := regexp.MustCompile("(?m)[\r\n]+^" + name + ".*$")
+	res := re.ReplaceAllString(scriptLines, "")
 
-		fmt.Println(res)
-		if res == true {
-			break
-		}
-	}
+	os.WriteFile(scriptFilePath, []byte(res), 0644)
 
 	return nil
 }
 
+// Runs the script with the same name as passed in as argument
 func runScript(name string) error {
-
 	// Get all the scripts
 	scripts := getScripts()
 
@@ -143,6 +144,10 @@ func runScript(name string) error {
 		}
 	}
 
+	if executablePath == "" {
+		return fmt.Errorf("Error: Could not find script \"%s\" in scripts", name)
+	}
+
 	cmd := exec.Command(executablePath)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -152,8 +157,40 @@ func runScript(name string) error {
 	return nil
 }
 
+func getPath(name string, option string) (res string, err error) {
+	// Get all the scripts
+	scripts := getScripts()
+
+	var temp script
+
+	// Find the editable path for specified script
+	for i := 0; i < len(scripts); i += 1 {
+		if scripts[i].name == name {
+			temp = scripts[i]
+			break
+		}
+	}
+
+	if temp.editable == "" || temp.executable == "" {
+		err = fmt.Errorf("Error: Could not find script \"%s\" in scripts", name)
+	} else {
+		if option == "executable" || option == "x" {
+			res = temp.executable
+		} else if option == "editable" || option == "e" {
+			res = temp.editable
+		} else {
+			res += fmt.Sprintf("Name       : %s\n", temp.name)
+			res += fmt.Sprintf("Editable   : %s\n", temp.editable)
+			res += fmt.Sprintf("Executable : %s\n", temp.executable)
+		}
+	}
+
+	return
+}
+
 func main() {
 	var newScriptStruct script
+	var specifier string
 
 	app := &cli.App{
 		Name:  "scripthub",
@@ -201,13 +238,12 @@ func main() {
 						Aliases:     []string{"n"},
 						Usage:       "Name of script to add",
 						Required:    true,
-						Value:       "myScript",
 						DefaultText: "",
 						Destination: &newScriptStruct.name,
 					},
 					&cli.StringFlag{
 						Name:        "editable",
-						Aliases:     []string{"ed"},
+						Aliases:     []string{"e"},
 						Usage:       "Path to editable",
 						Value:       "",
 						DefaultText: "Same as --executable",
@@ -215,10 +251,9 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name:        "executable",
-						Aliases:     []string{"ex"},
+						Aliases:     []string{"x"},
 						Usage:       "Path to executable",
 						Required:    true,
-						Value:       "FILE",
 						DefaultText: "",
 						Destination: &newScriptStruct.executable,
 					},
@@ -251,6 +286,28 @@ func main() {
 				Action: func(c *cli.Context) error {
 					name := c.Args().First()
 					err := runScript(name)
+					check(err)
+					return nil
+				},
+			},
+			// ================================================================
+			{
+				Name:      "path",
+				Aliases:   []string{"p"},
+				Usage:     "Get paths of a script",
+				ArgsUsage: "{script name}",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:        "specifier",
+						Aliases:     []string{"s"},
+						Usage:       "Pass in `x` to only get executable path, or `e` to only get editable path",
+						Destination: &specifier,
+					},
+				},
+				Action: func(c *cli.Context) error {
+					name := c.Args().First()
+					res, err := getPath(name, specifier)
+					fmt.Println(res)
 					check(err)
 					return nil
 				},
