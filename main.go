@@ -18,7 +18,15 @@ type script struct {
 	editable   string
 }
 
-const scriptFilePath = "/Users/torbratsberg/.config/scripthub/scripts"
+func getHomeDir() string {
+	homeDir, err := os.UserHomeDir()
+	check(err)
+
+	return filepath.Join(homeDir)
+}
+
+var configScriptsFilePath string = filepath.Join(getHomeDir(), "/.config/scripthub/scripts")
+var configScripthubPath string = filepath.Join(getHomeDir(), "/.config/scripthub")
 
 // Error checker
 func check(e error) {
@@ -29,7 +37,7 @@ func check(e error) {
 
 // Returns a list of all the scripts in the config file
 func getScripts() []script {
-	scriptPaths, err := os.ReadFile(scriptFilePath)
+	scriptPaths, err := os.ReadFile(configScriptsFilePath)
 	check(err)
 
 	scriptLines := strings.Split(string(scriptPaths), "\n")
@@ -69,7 +77,7 @@ func addScript(newScript script) error {
 	}
 
 	// Write new script entry to the scripts file
-	file, err := os.OpenFile(scriptFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(configScriptsFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
 	if err != nil {
 		log.Println(err)
@@ -116,7 +124,7 @@ func editScript(editScript string) error {
 
 // Removes script from the script file
 func removeScript(name string) error {
-	scriptPaths, err := os.ReadFile(scriptFilePath)
+	scriptPaths, err := os.ReadFile(configScriptsFilePath)
 	check(err)
 
 	scriptLines := string(scriptPaths)
@@ -125,7 +133,7 @@ func removeScript(name string) error {
 	re := regexp.MustCompile("(?m)[\r\n]+^" + name + ".*$")
 	res := re.ReplaceAllString(scriptLines, "")
 
-	os.WriteFile(scriptFilePath, []byte(res), 0644)
+	os.WriteFile(configScriptsFilePath, []byte(res), 0644)
 
 	return nil
 }
@@ -186,6 +194,34 @@ func getPath(name string, option string) (res string, err error) {
 	}
 
 	return
+}
+
+func setup() {
+	if _, err := os.Stat(configScriptsFilePath); os.IsNotExist(err) {
+		fmt.Println("Could not find scripts file. Generating one.")
+		fmt.Println("")
+
+		if _, err := os.Stat(configScripthubPath); os.IsNotExist(err) {
+			err := os.Mkdir(configScripthubPath, 0666)
+			check(err)
+			err = os.WriteFile(configScriptsFilePath, []byte(""), 0777)
+			check(err)
+			fmt.Println("Generated scripts file at: " + configScriptsFilePath)
+		}
+	} else {
+		fmt.Println("Scripts file found. No setup needed")
+		fmt.Println("Here are the scripts in your library: ")
+
+		scriptStructs := getScripts()
+		fmt.Println("")
+		for i := 0; i < len(scriptStructs); i += 1 {
+			fmt.Println("Name       : " + scriptStructs[i].name)
+			fmt.Println("Executable : " + scriptStructs[i].executable)
+			fmt.Println("Editable   : " + scriptStructs[i].editable)
+			fmt.Println("============")
+		}
+	}
+
 }
 
 func main() {
@@ -309,6 +345,15 @@ func main() {
 					res, err := getPath(name, specifier)
 					fmt.Println(res)
 					check(err)
+					return nil
+				},
+			},
+			// ================================================================
+			{
+				Name:  "setup",
+				Usage: "Set up scripthub",
+				Action: func(c *cli.Context) error {
+					setup()
 					return nil
 				},
 			},

@@ -16,7 +16,8 @@ A CLI tool to manage all your scripts scattered around on your computer.
 	- `{name of script to edit}`
 - `path, p` - Get paths for given script
 	- `--specifier, -s` - `x` || `executable` for only executable path, `e` || `editable` for only editable path
-	- `{name of script to edit}`
+	- `{name of script to get paths for}`
+- `setup` - Set up scripthub
 - `help, h` - Show help overview
 
 #### Global options
